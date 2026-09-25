@@ -23,6 +23,10 @@ import org.openmrs.module.DaemonTokenAware;
 import org.openmrs.module.Extension;
 import org.openmrs.module.Module;
 import org.openmrs.module.ModuleFactory;
+import java.util.Date;
+import org.openmrs.scheduler.SchedulerService;
+import org.openmrs.scheduler.TaskDefinition;
+import org.openmrs.module.patientflags.task.EvaluateAllFlagsTask;
 import org.openmrs.module.patientflags.task.PatientFlagTask;
 
 import java.lang.reflect.Method;
@@ -36,6 +40,12 @@ import java.util.Vector;
  */
 public class PatientFlagsModuleActivator extends BaseModuleActivator implements DaemonTokenAware {
 
+	public static final String EVALUATION_TASK_NAME = "Evaluate All Patient Flags";
+	
+	public static final String EVALUATION_INTERVAL_PROPERTY = "patientflags.evaluationIntervalSeconds";
+	
+	private static final Long DEFAULT_EVALUATION_INTERVAL = 86400L;
+	
 	private Log log = LogFactory.getLog(this.getClass());
 
 	public void started() {
@@ -119,7 +129,55 @@ public class PatientFlagsModuleActivator extends BaseModuleActivator implements 
 			ModuleFactory.getExtensionMap().put(extId, tmpExtensions);
 		}
 		
+		scheduleFlagEvaluation();
+		
 		log.info("Starting Patient Flags Module");
+	}
+	
+	/**
+	 * Registers the scheduled re-evaluation the first time the module starts.
+	 * 
+	 * Flags whose criteria depend on the passage of time are never raised otherwise: nothing is
+	 * written to the patient's record on the day they start matching, so no advice fires.
+	 */
+	private void scheduleFlagEvaluation() {
+		try {
+			SchedulerService schedulerService = Context.getSchedulerService();
+			if (schedulerService.getTaskByName(EVALUATION_TASK_NAME) != null) {
+				return;
+			}
+			
+			TaskDefinition task = new TaskDefinition();
+			task.setName(EVALUATION_TASK_NAME);
+			task.setDescription("Re-evaluates every flag, so that criteria which become true with the passage of time are raised.");
+			task.setTaskClass(EvaluateAllFlagsTask.class.getName());
+			task.setStartTime(new Date());
+			task.setRepeatInterval(evaluationIntervalSeconds());
+			task.setStartOnStartup(Boolean.TRUE);
+			task.setStarted(Boolean.TRUE);
+			
+			schedulerService.saveTaskDefinition(task);
+			schedulerService.scheduleTask(task);
+			log.info("Registered '" + EVALUATION_TASK_NAME + "' every " + task.getRepeatInterval() + "s");
+		}
+		catch (Exception e) {
+			// A module that cannot schedule itself must still start, rather than taking the
+			// distribution down with it where the scheduler is unavailable.
+			log.error("Could not schedule '" + EVALUATION_TASK_NAME + "'", e);
+		}
+	}
+	
+	private Long evaluationIntervalSeconds() {
+		String configured = Context.getAdministrationService().getGlobalProperty(EVALUATION_INTERVAL_PROPERTY);
+		if (configured != null && !configured.trim().isEmpty()) {
+			try {
+				return Long.valueOf(configured.trim());
+			}
+			catch (NumberFormatException e) {
+				log.warn(EVALUATION_INTERVAL_PROPERTY + " is not a number, using " + DEFAULT_EVALUATION_INTERVAL);
+			}
+		}
+		return DEFAULT_EVALUATION_INTERVAL;
 	}
 	
 	public void shutdown() {
