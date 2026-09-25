@@ -23,6 +23,8 @@ import org.openmrs.module.patientflags.PatientFlag;
 import org.openmrs.module.patientflags.Priority;
 import org.openmrs.module.patientflags.Tag;
 import org.openmrs.module.patientflags.api.FlagService;
+import org.openmrs.module.patientflags.FlagValidationResult;
+import org.openmrs.module.patientflags.evaluator.FlagEvaluator;
 import org.openmrs.module.patientflags.filter.Filter;
 import org.openmrs.test.BaseModuleContextSensitiveTest;
 
@@ -66,6 +68,39 @@ public class FlagServiceTest extends BaseModuleContextSensitiveTest {
 		Patient patient = Context.getService(PatientService.class).getPatient(2);
 		List<Flag> flags = flagService.generateFlagsForPatient(patient, context);
 		assertFalse(flags.isEmpty());
+	}
+	
+	/**
+	 * A voided patient must not be handed to the evaluators at all. Asserting only that no flags
+	 * come back would pass either way, because every evaluator throws on a voided patient and the
+	 * exception is swallowed per flag; what changes is that each one logs a stack trace first.
+	 */
+	@Test
+	public void generateFlagsForPatient_shouldNotEvaluateAnyFlagForAVoidedPatient() {
+		Flag counted = new Flag("counting flag", "counted", "counted");
+		counted.setEvaluator(CountingEvaluator.class.getName());
+		counted.setEnabled(Boolean.TRUE);
+		flagService.saveFlag(counted);
+		
+		PatientService patientService = Context.getService(PatientService.class);
+		Patient patient = patientService.getPatient(2);
+		
+		CountingEvaluator.evalCalls = 0;
+		flagService.generateFlagsForPatient(patient, new HashMap<Object, Object>());
+		assertTrue("a live patient should reach the evaluator", CountingEvaluator.evalCalls > 0);
+		
+		patientService.voidPatient(patient, "testing");
+		
+		CountingEvaluator.evalCalls = 0;
+		List<Flag> flags = flagService.generateFlagsForPatient(patientService.getPatient(2),
+		    new HashMap<Object, Object>());
+		assertEquals("a voided patient must not reach the evaluator", 0, CountingEvaluator.evalCalls);
+		assertTrue(flags.isEmpty());
+	}
+	
+	@Test
+	public void generateFlagsForPatient_shouldReturnNoFlagsForANullPatient() {
+		assertTrue(flagService.generateFlagsForPatient(null, new HashMap<Object, Object>()).isEmpty());
 	}
 	
 	/**
@@ -459,5 +494,35 @@ public class FlagServiceTest extends BaseModuleContextSensitiveTest {
 			patientFlag.setUuid("7d89924e-e8df-4551-a956-95de80529735");
 			patientFlag.setMessage(flag.getMessage());
 			return patientFlag;
+	}
+
+	/**
+	 * Counts how many times a flag asked it to evaluate a patient, so the test above can assert a
+	 * flag was never evaluated rather than only that nothing came back.
+	 */
+	public static class CountingEvaluator implements FlagEvaluator {
+		
+		public static int evalCalls = 0;
+		
+		@Override
+		public Boolean eval(Flag flag, Patient patient, Map<Object, Object> context) {
+			evalCalls++;
+			return Boolean.TRUE;
+		}
+		
+		@Override
+		public Cohort evalCohort(Flag flag, Cohort cohort, Map<Object, Object> context) {
+			return new Cohort();
+		}
+		
+		@Override
+		public FlagValidationResult validate(Flag flag) {
+			return new FlagValidationResult(true);
+		}
+		
+		@Override
+		public String evalMessage(Flag flag, int patientId) {
+			return flag.getMessage();
+		}
 	}
 }

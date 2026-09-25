@@ -98,6 +98,13 @@ public class FlagServiceImpl extends BaseOpenmrsService implements FlagService {
 	public List<Flag> generateFlagsForPatient(Patient patient, Filter filter, Map<Object, Object> context) {
 		List<Flag> results = new ArrayList<Flag>();
 		
+		// A voided patient carries no flags, and the evaluators refuse to run against one. Asking
+		// them anyway logs a stack trace per flag, so voiding a single patient fills the log with
+		// as many traces as there are flags.
+		if (patient == null || Boolean.TRUE.equals(patient.getVoided())) {
+			return results;
+		}
+		
 		// we can get rid of this once onStartup is implemented
 		if (!isInitialized)
 			refreshCache();
