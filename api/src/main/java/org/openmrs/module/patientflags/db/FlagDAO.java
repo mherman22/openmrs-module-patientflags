@@ -294,6 +294,15 @@ public interface FlagDAO {
 	List<PatientFlag> getPatientFlags(Patient patient) throws DAOException;
 	
 	/**
+	 * Gets all PatientFlags raised by a flag
+	 * 
+	 * @param flag the flag whose patients to fetch
+	 * @return the PatientFlags currently held for that flag
+	 * @throws DAOException
+	 */
+	List<PatientFlag> getPatientFlagsForFlag(Flag flag) throws DAOException;
+	
+	/**
 	 * Deletes all non voided flags for a given patient
 	 * 
 	 * @param patient the patient whose non voided flags to delete

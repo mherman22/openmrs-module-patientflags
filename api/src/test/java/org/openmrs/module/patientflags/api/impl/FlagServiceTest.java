@@ -104,6 +104,48 @@ public class FlagServiceTest extends BaseModuleContextSensitiveTest {
 	}
 	
 	/**
+	 * Tests of the getPatientFlagsForFlag(Flag flag) method
+	 */
+	@Test
+	public void getPatientFlagsForFlag_shouldReturnThePatientsCarryingTheFlag() {
+		Flag flag = flagService.getFlag(1);
+		Patient patient = Context.getService(PatientService.class).getPatient(2);
+		int before = flagService.getPatientFlagsForFlag(flag).size();
+		
+		flagService.savePatientFlag(new PatientFlag(patient, flag, "raised"));
+		List<PatientFlag> held = flagService.getPatientFlagsForFlag(flag);
+		
+		assertEquals(before + 1, held.size());
+		for (PatientFlag patientFlag : held) {
+			assertEquals(flag.getFlagId(), patientFlag.getFlag().getFlagId());
+		}
+	}
+	
+	@Test
+	public void getPatientFlagsForFlag_shouldNotReturnPatientsCarryingADifferentFlag() {
+		Flag other = flagService.getFlag(2);
+		int before = flagService.getPatientFlagsForFlag(other).size();
+		Patient patient = Context.getService(PatientService.class).getPatient(2);
+		
+		flagService.savePatientFlag(new PatientFlag(patient, flagService.getFlag(1), "raised"));
+		
+		assertEquals(before, flagService.getPatientFlagsForFlag(other).size());
+	}
+	
+	@Test
+	public void getPatientFlagsForFlag_shouldNotReturnVoidedRows() {
+		Flag flag = flagService.getFlag(1);
+		for (PatientFlag held : flagService.getPatientFlagsForFlag(flag)) {
+			assertFalse(held.getVoided());
+		}
+	}
+	
+	@Test
+	public void getPatientFlagsForFlag_shouldReturnEmptyForANullFlag() {
+		assertTrue(flagService.getPatientFlagsForFlag(null).isEmpty());
+	}
+	
+	/**
 	 * Tests of the getFlaggedPatients(Flag flag) method
 	 */
 	@Test

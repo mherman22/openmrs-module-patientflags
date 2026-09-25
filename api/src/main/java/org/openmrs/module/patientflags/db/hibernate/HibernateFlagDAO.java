@@ -457,6 +457,18 @@ public class HibernateFlagDAO implements FlagDAO {
 		criteria.add(Restrictions.eq("patient", patient));
 		return criteria.list();
 	}
+	
+	/**
+	 * @see org.openmrs.module.patientflags.db.FlagDAO#getPatientFlagsForFlag(Flag)
+	 */
+	@Override
+	@SuppressWarnings("unchecked")
+	public List<PatientFlag> getPatientFlagsForFlag(Flag flag) throws DAOException {
+		Criteria criteria = sessionFactory.getCurrentSession().createCriteria(PatientFlag.class);
+		criteria.add(Restrictions.eq("flag", flag));
+		criteria.add(Restrictions.eq("voided", false));
+		return criteria.list();
+	}
 
 
 	/**

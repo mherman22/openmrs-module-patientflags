@@ -629,6 +629,14 @@ public class FlagServiceImpl extends BaseOpenmrsService implements FlagService {
 	}
 
 	@Override
+	public List<PatientFlag> getPatientFlagsForFlag(Flag flag) {
+		if (flag == null) {
+			return new ArrayList<PatientFlag>();
+		}
+		return dao.getPatientFlagsForFlag(flag);
+	}
+	
+	@Override
 	public void savePatientFlag(PatientFlag patientFlag) throws DAOException {
 		dao.savePatientFlag(patientFlag);
 	}

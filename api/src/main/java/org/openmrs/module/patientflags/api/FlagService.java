@@ -579,6 +579,18 @@ public interface FlagService extends OpenmrsService {
 	@Transactional(readOnly = true)
 	public List<PatientFlag> getPatientFlags(Patient patient);
 	
+	/**
+	 * Gets the PatientFlags currently held for a flag.
+	 * 
+	 * The service can already go from a patient to their flags; this is the other direction, which
+	 * anything reconciling stored rows against a fresh evaluation, or listing everyone carrying a
+	 * flag, would otherwise have to reach into the table for.
+	 * 
+	 * @param flag the flag whose patients to fetch
+	 * @return the PatientFlags currently held for that flag, empty if the flag is null
+	 */
+	public List<PatientFlag> getPatientFlagsForFlag(Flag flag);
+	
 	@Transactional(readOnly = true)
 	public List<PatientFlag> getPatientFlags(Patient patient, Set<Role> roles, String displayPointName);
 }
