@@ -688,7 +688,8 @@ public class FlagServiceImpl extends BaseOpenmrsService implements FlagService {
 		if (executor == null) {
 			executor = Executors.newSingleThreadExecutor();
 		}
-		dao.deleteAllPatientFlags();
+		// The per-flag generator reconciles, so wiping the table here would throw away every
+		// flag's age on a full re-evaluation.
 		return executor.submit(PatientFlagTask.evaluateAllFlags());
 	}
 	

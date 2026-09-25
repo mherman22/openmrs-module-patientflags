@@ -14,6 +14,7 @@
 package org.openmrs.module.patientflags.task;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -82,13 +83,12 @@ public class PatientFlagTask implements Runnable {
 	}
 
 	private static void generatePatientFlags(Flag flag, FlagService service) {
-
-		service.deletePatientFlagsForFlag(flag);
 		generatePatientFlagsForFlagAndPatient(flag,service);
 	}
 
-	private static void generatePatientFlagsForFlagAndPatient(Flag flag, FlagService service){
+	static void generatePatientFlagsForFlagAndPatient(Flag flag, FlagService service){
 		if (!flag.getEnabled() || flag.getRetired()) {
+			service.deletePatientFlagsForFlag(flag);
 			return;
 		}
 		
@@ -103,7 +103,27 @@ public class PatientFlagTask implements Runnable {
 				.map(CohortMembership::getPatientId)
 				.collect(Collectors.toSet());
 
+		// Write only the difference. Deleting every row and rebuilding would reset date_created on
+		// rows whose patient never stopped matching, and that is the only record of how long a flag
+		// has been raised.
+		Set<Integer> alreadyHeld = new HashSet<Integer>();
+		for (PatientFlag held : service.getPatientFlagsForFlag(flag)) {
+			Integer patientId = held.getPatient() == null ? null : held.getPatient().getPatientId();
+			if (patientId == null) {
+				continue;
+			}
+			if (members.contains(patientId)) {
+				alreadyHeld.add(patientId);
+			}
+			else {
+				service.deletePatientFlagForPatient(held.getPatient(), flag);
+			}
+		}
+
 		for (Integer patientId : members) {
+			if (alreadyHeld.contains(patientId)) {
+				continue;
+			}
 
 			@SuppressWarnings("unchecked")
 			List<String> flgs = (List<String>)context.get(patientId);
@@ -118,12 +138,34 @@ public class PatientFlagTask implements Runnable {
 		}
 	}
 	
-	private void generatePatientFlags(Patient patient, FlagService service) {
-		service.deletePatientFlagsForPatient(patient);
-		
+	void generatePatientFlags(Patient patient, FlagService service) {
 		HashMap<Object, Object> context = new HashMap<Object, Object>();
 		List<Flag> flags = service.generateFlagsForPatient(patient, context);
+
+		// Same reasoning as the per-flag path: clear only the flags this patient no longer matches
+		// and add only the ones that are new, so an unchanged row keeps its date_created.
+		Set<Integer> stillMatching = new HashSet<Integer>();
 		for (Flag flag : flags) {
+			stillMatching.add(flag.getFlagId());
+		}
+		Set<Integer> alreadyHeld = new HashSet<Integer>();
+		for (PatientFlag held : service.getPatientFlags(patient)) {
+			Integer flagId = held.getFlag() == null ? null : held.getFlag().getFlagId();
+			if (flagId == null) {
+				continue;
+			}
+			if (stillMatching.contains(flagId)) {
+				alreadyHeld.add(flagId);
+			}
+			else {
+				service.deletePatientFlagForPatient(patient, held.getFlag());
+			}
+		}
+
+		for (Flag flag : flags) {
+			if (alreadyHeld.contains(flag.getFlagId())) {
+				continue;
+			}
 
 			@SuppressWarnings("unchecked")
 			List<String> flgs = (List<String>)context.get(patient.getPatientId());
