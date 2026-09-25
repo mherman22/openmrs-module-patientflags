@@ -6,6 +6,8 @@ import io.swagger.models.properties.BooleanProperty;
 import io.swagger.models.properties.RefProperty;
 import io.swagger.models.properties.StringProperty;
 import org.apache.commons.lang3.StringUtils;
+import java.util.Set;
+import org.openmrs.Role;
 import org.openmrs.Patient;
 import org.openmrs.api.context.Context;
 import org.openmrs.module.patientflags.PatientFlag;
@@ -111,7 +113,21 @@ public class PatientFlagResource extends DataDelegatingCrudResource<PatientFlag>
 		if (StringUtils.isNotBlank(patientUuid)) {
 			Patient patient = Context.getPatientService().getPatientByUuid(patientUuid);
 			if( patient != null) {
-				return new NeedsPaging<PatientFlag>(Context.getService(FlagService.class).getPatientFlags(patient), context);
+				FlagService flagService = Context.getService(FlagService.class);
+				
+				// A tag restricts a flag to the roles and display points on that tag, and the
+				// legacy dashboard honours that by asking for a display point. Without one this
+				// returns every stored flag, so a caller that wants the same scoping as 2.x has to
+				// name the display point it is rendering.
+				String displayPoint = context.getParameter("displayPoint");
+				if (StringUtils.isNotBlank(displayPoint)) {
+					Set<Role> roles = Context.getAuthenticatedUser() == null ? null
+					        : Context.getAuthenticatedUser().getAllRoles();
+					return new NeedsPaging<PatientFlag>(flagService.getPatientFlags(patient, roles, displayPoint),
+					        context);
+				}
+				
+				return new NeedsPaging<PatientFlag>(flagService.getPatientFlags(patient), context);
 			}
 		} 
 		
